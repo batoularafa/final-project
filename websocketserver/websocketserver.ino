@@ -1,20 +1,30 @@
+
 #include <WiFi.h>
 #include <WebSocketsServer.h>
-//#include <ESPServo.h>
+//#include <ESP32Servo.h>
+
+//void movingForward();   void movingBackward();    void movingRight();       void movingLeft();
 
 // Motor pins
 const int leftFront = 19;
 const int leftBack = 18;
 const int rightFront = 5;
 const int rightBack = 17;
+
 const int enableLeft = 23;
+int channel1 = 0;
+
 const int enableRight = 16;
+int channel2 = 1;
 
-//Servo gripper;
-//Servo lift;
-//int pos0 = 0;
-//int pos1 = 0;
+int freq = 1000;
+int Res = 8;
 
+/*Servo gripper;
+Servo lift;
+int pos0 = 0;
+int pos1 = 0;
+*/
 // Encoder pins
 const int encoderPinA = 34;
 const int encoderPinB = 35;
@@ -29,11 +39,9 @@ float kp = 2.0;
 float kd = 2.0;
 float ki = 2.0;
 
-
-// Replace constants
-//Enter the network credentials
-const char * ssid = "Afiz Makerspace EXT";  
-const char * password = "afiz_makerspace.2022";
+//network credentials
+const char * ssid = "gado";  
+const char * password = "21010716*22";
 String text;
 //Global varialbe defined with port 80
 WebSocketsServer webSocket= WebSocketsServer(80);
@@ -63,19 +71,35 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
             webSocket.sendTXT(num, payload);
             if(text == "W"){
             movingForward();
+            
             }
             else if(text == "S"){
-             movingBackward();
+            movingBackward();
+            
             }
-           else if(text == "D"){
+            else if(text == "D"){
             movingRight();
+            
             }
-           else if(text == "A"){
+            else if(text == "A"){
             movingLeft();
+            
             }
-           else{
+           /* else if(text == "G"){
+            gripping();
+            }
+            else if(text == "R"){
+            releasing();
+            }
+            else if(text == "L"){
+            lifting();
+            }
+            else if(text == "P"){
+            putting();
+            }*/
+            else{
             noMovement();
-           }
+            }
            
             
             break;
@@ -92,7 +116,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
   }
 
 void setup() {
-  Serial.begin(115200);     //Baud rate = 115200
+  Serial.begin(115200);    
   Serial.println("Connecting");
   WiFi.begin(ssid, password);
   while(WiFi.status() != WL_CONNECTED){
@@ -103,26 +127,32 @@ void setup() {
   Serial.println("Connected");
   Serial.print("My IP Address: ");
   Serial.println(WiFi.localIP());
+
+  //start Websocket Server
+  webSocket.begin();
+  webSocket.onEvent(onWebSocketEvent);
   
   pinMode(leftFront, OUTPUT);
   pinMode(leftBack, OUTPUT);
-  pinMode(enableLeft, OUTPUT);
-  pinMode(rightFront, OUTPUT);
+  //pinMode(enableLeft, OUTPUT);
+  pinMode(rightFront, OUTPUT); 
   pinMode(rightBack, OUTPUT);
-  pinMode(enableRight, OUTPUT);
+  //pinMode(enableRight, OUTPUT);
 
-  //gripper.attach(32);
-  //lift.attach(33);
+
+  ledcSetup(channel1, freq, Res);
+  ledcSetup(channel2, freq, Res);
+  ledcAttachPin(enableLeft, channel1);
+  ledcAttachPin(enableRight, channel2);
+
+  /*gripper.attach(32);
+  lift.attach(33);*/
 
   pinMode(encoderPinA, INPUT);
   pinMode(encoderPinB, INPUT);
 
   attachInterrupt(digitalPinToInterrupt(encoderPinA), handleEncoder1, RISING);
   attachInterrupt(digitalPinToInterrupt(encoderPinB), handleEncoder2, RISING);
-
-  //start Websocket Server
-  webSocket.begin();
-  webSocket.onEvent(onWebSocketEvent);
 
 }
 void loop() {
@@ -149,7 +179,7 @@ float pidController(int target, float kp, float kd, float ki) {
   float eDerivative = (e - ePrevious) / deltaT;
   eIntegral = eIntegral + e * deltaT;
 
-  float u = (kp * e) + (kd * eDerivative) + (ki * eIntegral);
+  float u = (kp * e) + (ki * eIntegral) + (kd * eDerivative);
 
   previousTime = currentTime;
   ePrevious = e;
@@ -168,7 +198,7 @@ void moveLeftMotor(int frontPin, int backPin, float u) {
 
   digitalWrite(frontPin, direction);
   digitalWrite(backPin, !direction);
-  analogWrite(enableLeft, speed);
+  ledcWrite(enableLeft, speed);
 }
 
 void moveRightMotor(int frontPin, int backPin, float u) {
@@ -181,7 +211,7 @@ void moveRightMotor(int frontPin, int backPin, float u) {
 
   digitalWrite(frontPin, direction);
   digitalWrite(backPin, !direction);
-  analogWrite(enableRight, speed);
+  ledcWrite(enableRight, speed);
 }
 
 
@@ -189,8 +219,6 @@ void moveRightMotor(int frontPin, int backPin, float u) {
 void movingForward() {
   int target = encoder1Count;
   float u = pidController(target, kp, kd, ki);
-  digitalWrite(enableLeft, HIGH);
-  digitalWrite(enableRight, HIGH);
 
   moveLeftMotor(leftFront, leftBack, u);
   moveRightMotor(rightFront, rightBack, u);
@@ -199,8 +227,6 @@ void movingForward() {
 void movingBackward() {
   int target = encoder1Count;
   float u = pidController(target, kp, kd, ki);
-  digitalWrite(enableLeft, HIGH);
-  digitalWrite(enableRight, HIGH);
 
   moveLeftMotor(leftFront, leftBack, -u);
   moveRightMotor(rightFront, rightBack, -u);
@@ -209,8 +235,6 @@ void movingBackward() {
 void movingLeft() {
   int target = encoder1Count;
   float u = pidController(target, kp, kd, ki);
-  digitalWrite(enableLeft, HIGH);
-  digitalWrite(enableRight, HIGH);
 
   moveLeftMotor(leftFront, leftBack, -u);
   moveRightMotor(rightFront, rightBack, u);
@@ -219,8 +243,6 @@ void movingLeft() {
 void movingRight() {
   int target = encoder1Count;
   float u = pidController(target, kp, kd, ki);
-  digitalWrite(enableLeft, HIGH);
-  digitalWrite(enableRight, HIGH);
 
   moveLeftMotor(leftFront, leftBack, u);
   moveRightMotor(rightFront, rightBack, -u);
@@ -232,3 +254,31 @@ void noMovement() {
   digitalWrite(rightFront, LOW);
   digitalWrite(rightBack, LOW);
 }
+/*
+void gripping() {
+  pos0 = pos0 + 5;
+  if (pos0 >= 180) {
+    pos0 = 180;
+  }
+}
+
+void releasing() {
+  pos0 = pos0 - 5;
+  if (pos0 <= 0) {
+    pos0 = 0;
+  }
+}
+
+void lifting() {
+  pos1 = pos1 + 5;
+  if (pos1 >= 180) {
+    pos1 = 180;
+  }
+}
+
+void putting() {
+  pos0 = pos0 - 5;
+  if (pos0 <= 0) {
+    pos0 = 0;
+  }
+}*/
